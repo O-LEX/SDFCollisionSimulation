@@ -1,5 +1,7 @@
 # SDF Collision Simulation
 
+![SDFCollisionSimulation](https://github.com/user-attachments/assets/713a8995-a711-43e3-96d2-f5c61af8174f)
+
 A real-time particle collision simulation using Signed Distance Fields (SDF) and OpenGL rendering.
 
 ## Overview
