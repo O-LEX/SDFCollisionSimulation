@@ -3,13 +3,11 @@
 #include <iostream>
 
 Simulation::Simulation(const glm::vec3& boxMin, const glm::vec3& boxMax) 
-    : boundsMin(boxMin), boundsMax(boxMax), particleSystem(100), 
-      mesh(nullptr), sdf(nullptr), meshPosition(0.0f, 0.0f, 0.0f), 
-      meshSet(false), sdfSet(false) {
+    : boundsMin(boxMin), boundsMax(boxMax), particleSystem(100) {
 }
 
 Simulation::~Simulation() {
-    // No need to delete - we don't own the mesh and SDF
+    // std::unique_ptr automatically handles cleanup
 }
 
 void Simulation::initialize(int numParticles, float particleSpeed, float particleSize) {
@@ -25,10 +23,20 @@ void Simulation::update(float deltaTime) {
     // Handle wall collisions
     handleWallCollisions();
     
-    // Handle mesh collisions if SDF is available
-    if (sdfSet && meshSet) {
-        handleMeshCollisions();
+    // Handle collisions with all collision objects
+    handleMultipleCollisionObjectCollisions();
+}
+
+void Simulation::addCollisionObject(std::unique_ptr<CollisionObject> collisionObject) {
+    if (collisionObject && collisionObject->isValid()) {
+        collisionObjects.push_back(std::move(collisionObject));
     }
+}
+
+
+
+void Simulation::clearCollisionObjects() {
+    collisionObjects.clear();
 }
 
 const std::vector<Particle>& Simulation::getParticles() const {
@@ -115,26 +123,8 @@ bool Simulation::checkWallCollision(const Particle& particle, glm::vec3& normal)
     return collision;
 }
 
-void Simulation::setMesh(const Mesh& meshRef) {
-    mesh = &meshRef;
-    meshSet = true;
-    std::cout << "Mesh set in simulation with " << mesh->getTriangles().size() 
-              << " triangles" << std::endl;
-}
-
-void Simulation::setSDF(const SDF& sdfRef) {
-    sdf = &sdfRef;
-    sdfSet = true;
-    std::cout << "SDF set in simulation with resolution " << sdf->getResolution() 
-              << "x" << sdf->getResolution() << "x" << sdf->getResolution() << std::endl;
-}
-
-void Simulation::setMeshPosition(const glm::vec3& position) {
-    meshPosition = position;
-}
-
-void Simulation::handleMeshCollisions() {
-    if (!sdf || !sdfSet) return;
+void Simulation::handleMultipleCollisionObjectCollisions() {
+    if (collisionObjects.empty()) return;
     
     std::vector<Particle>& particles = particleSystem.getParticles();
     
@@ -142,26 +132,33 @@ void Simulation::handleMeshCollisions() {
         glm::vec3 pos = particle.getPosition();
         float radius = particle.getSize();
         
-        // Sample SDF at particle position (accounting for mesh position offset)
-        glm::vec3 sdfPos = pos - meshPosition;
-        float distance = sdf->sample(sdfPos);
-        
-        // Check for collision (particle inside or very close to mesh surface)
-        if (distance < radius) {
-            // Get surface normal using SDF gradient
-            glm::vec3 normal = sdf->gradient(sdfPos);
+        // Check collision with each collision object
+        for (const auto& obj : collisionObjects) {
+            if (!obj || !obj->isValid()) continue;
             
-            // Normalize if not zero
-            if (glm::length(normal) > 0.001f) {
-                normal = glm::normalize(normal);
+            // Sample SDF at particle position
+            float distance = obj->getSignedDistance(pos);
+            
+            // Check for collision (particle inside or very close to mesh surface)
+            if (distance < radius) {
+                // Get surface normal using SDF gradient
+                glm::vec3 normal = obj->getNormal(pos);
                 
-                // Reflect velocity
-                glm::vec3 newVelocity = reflectVelocity(particle.getVelocity(), normal);
-                particle.setVelocity(newVelocity);
-                
-                // Push particle outside mesh surface
-                glm::vec3 correctedPos = pos + normal * (radius - distance + 0.001f);
-                particle.setPosition(correctedPos);
+                // Normalize if not zero
+                if (glm::length(normal) > 0.001f) {
+                    normal = glm::normalize(normal);
+                    
+                    // Reflect velocity
+                    glm::vec3 newVelocity = reflectVelocity(particle.getVelocity(), normal);
+                    particle.setVelocity(newVelocity);
+                    
+                    // Push particle outside mesh surface
+                    glm::vec3 correctedPos = pos + normal * (radius - distance + 0.001f);
+                    particle.setPosition(correctedPos);
+                    
+                    // Break after first collision to avoid double corrections
+                    break;
+                }
             }
         }
     }

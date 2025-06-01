@@ -16,6 +16,7 @@ set(SOURCES
     src/renderer.cpp
     src/particle.cpp
     src/simulation.cpp
+    src/collision_object.cpp
 )
 
 add_executable(sdf_simulation ${SOURCES})
@@ -30,3 +31,5 @@ target_include_directories(sdf_simulation PRIVATE
     ${GLFW3_INCLUDE_DIRS}
     src/
 )
+
+add_subdirectory(particle_simulation)

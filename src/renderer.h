@@ -23,6 +23,7 @@ public:
     void drawWireframeBox(const glm::vec3& min, const glm::vec3& max);
     void drawParticles(const std::vector<Particle>& particles);
     void drawMesh(const Mesh& mesh, const glm::vec3& position);
+    void drawMeshes(const std::vector<const Mesh*>& meshes, const std::vector<glm::vec3>& positions);
     void setCamera(const glm::vec3& position, const glm::vec3& target, const glm::vec3& up);
     void setPerspective(float fov, float aspect, float near, float far);
     

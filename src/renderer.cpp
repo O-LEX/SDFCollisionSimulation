@@ -421,6 +421,19 @@ void Renderer::drawMesh(const Mesh& mesh, const glm::vec3& position) {
     glBindVertexArray(0);
 }
 
+void Renderer::drawMeshes(const std::vector<const Mesh*>& meshes, const std::vector<glm::vec3>& positions) {
+    if (meshes.size() != positions.size()) {
+        std::cerr << "Error: Meshes and positions vectors must have the same size" << std::endl;
+        return;
+    }
+    
+    for (size_t i = 0; i < meshes.size(); ++i) {
+        if (meshes[i]) {
+            drawMesh(*meshes[i], positions[i]);
+        }
+    }
+}
+
 // Static callback functions
 void Renderer::mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
     Renderer* renderer = static_cast<Renderer*>(glfwGetWindowUserPointer(window));

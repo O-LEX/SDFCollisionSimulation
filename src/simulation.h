@@ -3,9 +3,9 @@
 #include <glm/glm.hpp>
 #include <vector>
 #include <string>
+#include <memory>
 #include "particle.h"
-#include "mesh.h"
-#include "sdf.h"
+#include "collision_object.h"
 
 class Simulation {
 public:
@@ -15,29 +15,25 @@ public:
     void initialize(int numParticles = 100, float particleSpeed = 2.0f, float particleSize = 0.05f);
     void update(float deltaTime);
     
-    void setMesh(const Mesh& meshRef);
-    void setSDF(const SDF& sdfRef);
+    // CollisionObject management
+    void addCollisionObject(std::unique_ptr<CollisionObject> collisionObject);
+    void clearCollisionObjects();
     
     const std::vector<Particle>& getParticles() const;
-    const Mesh& getMesh() const { return *mesh; }
-    const glm::vec3& getMeshPosition() const { return meshPosition; }
+    const std::vector<std::unique_ptr<CollisionObject>>& getCollisionObjects() const { return collisionObjects; }
+    size_t getCollisionObjectCount() const { return collisionObjects.size(); }
     const glm::vec3& getBoundsMin() const { return boundsMin; }
     const glm::vec3& getBoundsMax() const { return boundsMax; }
     
     void setParticleSize(float size);
-    void setMeshPosition(const glm::vec3& position);
     
 private:
     ParticleSystem particleSystem;
-    const Mesh* mesh;        // Pointer to external mesh
-    const SDF* sdf;          // Pointer to external SDF
-    glm::vec3 meshPosition;
+    std::vector<std::unique_ptr<CollisionObject>> collisionObjects;
     glm::vec3 boundsMin, boundsMax;
-    bool meshSet;
-    bool sdfSet;
     
     void handleWallCollisions();
-    void handleMeshCollisions();
+    void handleMultipleCollisionObjectCollisions();
     glm::vec3 reflectVelocity(const glm::vec3& velocity, const glm::vec3& normal) const;
     bool checkWallCollision(const Particle& particle, glm::vec3& normal) const;
 };
