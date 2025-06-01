@@ -1,8 +1,10 @@
 #include "collision_object.h"
 #include <glm/gtc/matrix_inverse.hpp>
+#include <limits>
 
 CollisionObject::CollisionObject() 
-    : sdf(64), position(0.0f), rotation(1.0f, 0.0f, 0.0f, 0.0f), scale(1.0f),
+    : sdf(64), position(0.0f), rotation(1.0f, 0.0f, 0.0f, 0.0f), scale(1.0f), velocity(0.0f),
+      mass(0.0f), inverseMass(0.0f),  // Default to static object (infinite mass)
       transformMatrix(1.0f), inverseTransformMatrix(1.0f), transformDirty(true),
       meshLoaded(false), sdfGenerated(false) {
 }
@@ -15,11 +17,16 @@ bool CollisionObject::loadFromOBJ(const std::string& filename, int sdfResolution
         return false;
     }
     meshLoaded = true;
-    
-    // Generate SDF with specified resolution
+      // Generate SDF with specified resolution
     sdf = SDF(sdfResolution);
     sdf.generateFromMesh(mesh);
     sdfGenerated = true;
+    
+    // Calculate default mass based on mesh volume approximation
+    glm::vec3 meshSize = mesh.getMax() - mesh.getMin();
+    float volume = meshSize.x * meshSize.y * meshSize.z;
+    float defaultDensity = 1.0f;  // Assume unit density
+    setMass(volume * defaultDensity);
     
     // Mark transform as dirty to ensure matrices are recalculated
     transformDirty = true;
@@ -40,6 +47,26 @@ void CollisionObject::setRotation(const glm::quat& rotation) {
 void CollisionObject::setScale(const glm::vec3& scale) {
     this->scale = scale;
     transformDirty = true;
+}
+
+void CollisionObject::setVelocity(const glm::vec3& velocity) {
+    this->velocity = velocity;
+}
+
+void CollisionObject::updatePhysics(float deltaTime) {
+    if (!isStatic() && deltaTime > 0.0f) {
+        // Update position based on velocity
+        setPosition(position + velocity * deltaTime);
+    }
+}
+
+void CollisionObject::setMass(float mass) {
+    this->mass = mass;
+    if (mass > 0.0f) {
+        inverseMass = 1.0f / mass;
+    } else {
+        inverseMass = 0.0f;  // Static object (infinite mass)
+    }
 }
 
 float CollisionObject::getSignedDistance(const glm::vec3& worldPosition) const {

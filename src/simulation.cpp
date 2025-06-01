@@ -17,6 +17,16 @@ void Simulation::initialize(int numParticles, float particleSpeed, float particl
 }
 
 void Simulation::update(float deltaTime) {
+    // Update collision object physics (position based on velocity)
+    for (auto& obj : collisionObjects) {
+        if (obj && obj->isValid()) {
+            obj->updatePhysics(deltaTime);
+        }
+    }
+    
+    // Check collision object bounds and bounce if needed
+    updateCollisionObjectBounds();
+    
     // Update particle positions
     particleSystem.update(deltaTime);
     
@@ -28,8 +38,12 @@ void Simulation::update(float deltaTime) {
 }
 
 void Simulation::addCollisionObject(std::unique_ptr<CollisionObject> collisionObject) {
+    std::cout << "Inside addCollisionObject. Is collisionObject valid? " << (collisionObject && collisionObject->isValid() ? "Yes" : "No") << std::endl;
     if (collisionObject && collisionObject->isValid()) {
         collisionObjects.push_back(std::move(collisionObject));
+        std::cout << "Collision object added to vector. Vector size: " << collisionObjects.size() << std::endl;
+    } else {
+        std::cout << "Collision object NOT added to vector." << std::endl;
     }
 }
 
@@ -131,9 +145,8 @@ void Simulation::handleMultipleCollisionObjectCollisions() {
     for (auto& particle : particles) {
         glm::vec3 pos = particle.getPosition();
         float radius = particle.getSize();
-        
-        // Check collision with each collision object
-        for (const auto& obj : collisionObjects) {
+          // Check collision with each collision object
+        for (auto& obj : collisionObjects) {
             if (!obj || !obj->isValid()) continue;
             
             // Sample SDF at particle position
@@ -143,13 +156,12 @@ void Simulation::handleMultipleCollisionObjectCollisions() {
             if (distance < radius) {
                 // Get surface normal using SDF gradient
                 glm::vec3 normal = obj->getNormal(pos);
-                
-                // Normalize if not zero
+                  // Normalize if not zero
                 if (glm::length(normal) > 0.001f) {
                     normal = glm::normalize(normal);
                     
-                    // Reflect velocity
-                    glm::vec3 newVelocity = reflectVelocity(particle.getVelocity(), normal);
+                    // Calculate collision response considering masses
+                    glm::vec3 newVelocity = calculateCollisionResponse(particle, *obj, normal);
                     particle.setVelocity(newVelocity);
                     
                     // Push particle outside mesh surface
@@ -160,6 +172,101 @@ void Simulation::handleMultipleCollisionObjectCollisions() {
                     break;
                 }
             }
+        }
+    }
+}
+
+glm::vec3 Simulation::calculateCollisionResponse(const Particle& particle, CollisionObject& object, const glm::vec3& normal) {
+    // If collision object is static (infinite mass), use simple reflection
+    if (object.isStatic()) {
+        return reflectVelocity(particle.getVelocity(), normal);
+    }
+    
+    // For dynamic collision objects, calculate velocities after collision using conservation of momentum
+    float m1 = particle.getMass();
+    float m2 = object.getMass();
+    glm::vec3 v1 = particle.getVelocity();
+    glm::vec3 v2 = object.getVelocity();  // Use actual collision object velocity
+    
+    // Calculate relative velocity
+    glm::vec3 relativeVelocity = v1 - v2;
+    float velocityAlongNormal = glm::dot(relativeVelocity, normal);
+    
+    // Do not resolve if velocities are separating
+    if (velocityAlongNormal > 0) {
+        return v1;
+    }
+    
+    // Restitution coefficient (0 = perfectly inelastic, 1 = perfectly elastic)
+    float restitution = 0.8f;
+    
+    // Calculate impulse scalar
+    float j = -(1 + restitution) * velocityAlongNormal;
+    j /= (particle.getInverseMass() + object.getInverseMass());
+      // Apply impulse
+    glm::vec3 impulse = j * normal;
+    
+    // Calculate new velocities for both particle and collision object
+    glm::vec3 newParticleVelocity = v1 + particle.getInverseMass() * impulse;
+    glm::vec3 newObjectVelocity = v2 - object.getInverseMass() * impulse;
+    
+    // Update collision object velocity
+    object.setVelocity(newObjectVelocity);
+    
+    return newParticleVelocity;
+}
+
+void Simulation::updateCollisionObjectBounds() {
+    for (auto& obj : collisionObjects) {
+        if (!obj || obj->isStatic()) {
+            continue;  // Skip static objects
+        }
+        
+        glm::vec3 position = obj->getPosition();
+        glm::vec3 velocity = obj->getVelocity();
+        bool bounced = false;
+        
+        // Get object bounds in world space
+        glm::vec3 objMin = obj->getWorldMin();
+        glm::vec3 objMax = obj->getWorldMax();
+        
+        // Check X bounds
+        if (objMin.x <= boundsMin.x) {
+            velocity.x = glm::abs(velocity.x);  // Force positive velocity
+            position.x = boundsMin.x + (position.x - objMin.x);  // Adjust position
+            bounced = true;
+        } else if (objMax.x >= boundsMax.x) {
+            velocity.x = -glm::abs(velocity.x);  // Force negative velocity
+            position.x = boundsMax.x - (objMax.x - position.x);  // Adjust position
+            bounced = true;
+        }
+        
+        // Check Y bounds
+        if (objMin.y <= boundsMin.y) {
+            velocity.y = glm::abs(velocity.y);  // Force positive velocity
+            position.y = boundsMin.y + (position.y - objMin.y);  // Adjust position
+            bounced = true;
+        } else if (objMax.y >= boundsMax.y) {
+            velocity.y = -glm::abs(velocity.y);  // Force negative velocity
+            position.y = boundsMax.y - (objMax.y - position.y);  // Adjust position
+            bounced = true;
+        }
+        
+        // Check Z bounds
+        if (objMin.z <= boundsMin.z) {
+            velocity.z = glm::abs(velocity.z);  // Force positive velocity
+            position.z = boundsMin.z + (position.z - objMin.z);  // Adjust position
+            bounced = true;
+        } else if (objMax.z >= boundsMax.z) {
+            velocity.z = -glm::abs(velocity.z);  // Force negative velocity
+            position.z = boundsMax.z - (objMax.z - position.z);  // Adjust position
+            bounced = true;
+        }
+        
+        // Update velocity and position if bounced
+        if (bounced) {
+            obj->setVelocity(velocity);
+            obj->setPosition(position);
         }
     }
 }

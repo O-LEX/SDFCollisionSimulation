@@ -2,6 +2,11 @@
 #include <iostream>
 #include <cmath>
 
+// Define M_PI if not defined (Windows compatibility)
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 // Vertex shader source
 const char* vertexShaderSource = R"(
 #version 330 core
@@ -113,8 +118,6 @@ void Renderer::cleanup() {
     if (sphereVAO) glDeleteVertexArrays(1, &sphereVAO);
     if (sphereVBO) glDeleteBuffers(1, &sphereVBO);
     if (sphereEBO) glDeleteBuffers(1, &sphereEBO);
-    if (meshVAO) glDeleteVertexArrays(1, &meshVAO);
-    if (meshVBO) glDeleteBuffers(1, &meshVBO);
     if (shaderProgram) glDeleteProgram(shaderProgram);
     
     if (window) {
@@ -306,35 +309,51 @@ void Renderer::drawParticles(const std::vector<Particle>& particles) {
 }
 
 void Renderer::setupSphereGeometry() {
-    // Create a simple icosphere (subdivided icosahedron)
+    // Create a high-resolution UV sphere (latitude-longitude sphere)
     std::vector<glm::vec3> vertices;
     std::vector<unsigned int> indices;
     
-    // Golden ratio
-    const float phi = (1.0f + sqrt(5.0f)) / 2.0f;
-    const float a = 1.0f;
-    const float b = 1.0f / phi;
+    const int latitudes = 32;   // Number of latitude divisions (horizontal rings)
+    const int longitudes = 64;  // Number of longitude divisions (vertical segments)
     
-    // 12 vertices of icosahedron
-    vertices = {
-        {0, b, -a}, {b, a, 0}, {-b, a, 0}, {0, b, a},
-        {0, -b, a}, {-a, 0, b}, {0, -b, -a}, {a, 0, -b},
-        {a, 0, b}, {-a, 0, -b}, {b, -a, 0}, {-b, -a, 0}
-    };
-    
-    // Normalize vertices to unit sphere
-    for (auto& vertex : vertices) {
-        vertex = glm::normalize(vertex);
+    // Generate vertices
+    for (int lat = 0; lat <= latitudes; ++lat) {
+        float theta = lat * M_PI / latitudes;  // 0 to PI
+        float sinTheta = sin(theta);
+        float cosTheta = cos(theta);
+        
+        for (int lon = 0; lon <= longitudes; ++lon) {
+            float phi = lon * 2 * M_PI / longitudes;  // 0 to 2*PI
+            float sinPhi = sin(phi);
+            float cosPhi = cos(phi);
+            
+            // Calculate vertex position on unit sphere
+            glm::vec3 vertex;
+            vertex.x = cosPhi * sinTheta;
+            vertex.y = cosTheta;
+            vertex.z = sinPhi * sinTheta;
+            
+            vertices.push_back(vertex);
+        }
     }
     
-    // 20 triangular faces
-    indices = {
-        2, 1, 0,   1, 2, 3,   5, 4, 3,   4, 8, 3,
-        7, 6, 0,   6, 9, 0,   11, 10, 4, 10, 11, 6,
-        9, 5, 2,   5, 9, 11,  8, 7, 1,   7, 8, 10,
-        2, 5, 3,   8, 1, 3,   9, 2, 0,   1, 7, 0,
-        11, 9, 6,  7, 10, 6,  5, 11, 4,  10, 8, 4
-    };
+    // Generate indices for triangles
+    for (int lat = 0; lat < latitudes; ++lat) {
+        for (int lon = 0; lon < longitudes; ++lon) {
+            int first = lat * (longitudes + 1) + lon;
+            int second = first + longitudes + 1;
+            
+            // First triangle
+            indices.push_back(first);
+            indices.push_back(second);
+            indices.push_back(first + 1);
+            
+            // Second triangle
+            indices.push_back(second);
+            indices.push_back(second + 1);
+            indices.push_back(first + 1);
+        }
+    }
     
     sphereIndexCount = indices.size();
     
@@ -370,6 +389,7 @@ void Renderer::drawMesh(const Mesh& mesh, const glm::vec3& position) {
     // Create transformation matrix
     glm::mat4 model = glm::mat4(1.0f);
     model = glm::translate(model, position);
+    // TODO: Add rotation and scale if needed, from CollisionObject
     
     // Set uniforms
     GLint modelLoc = glGetUniformLocation(shaderProgram, "model");
@@ -382,43 +402,7 @@ void Renderer::drawMesh(const Mesh& mesh, const glm::vec3& position) {
     glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projectionMatrix));
     glUniform3f(colorLoc, 0.3f, 0.8f, 0.3f); // Green color for mesh
     
-    // Generate VAO and VBO for this mesh if not already done
-    if (meshVAO == 0) {
-        glGenVertexArrays(1, &meshVAO);
-        glGenBuffers(1, &meshVBO);
-    }
-    
-    // Upload mesh data from triangles
-    const auto& triangles = mesh.getTriangles();
-    std::vector<float> vertexData;
-    for (const auto& triangle : triangles) {
-        // Add vertices for each triangle
-        vertexData.push_back(triangle.v0.x);
-        vertexData.push_back(triangle.v0.y);
-        vertexData.push_back(triangle.v0.z);
-        
-        vertexData.push_back(triangle.v1.x);
-        vertexData.push_back(triangle.v1.y);
-        vertexData.push_back(triangle.v1.z);
-        
-        vertexData.push_back(triangle.v2.x);
-        vertexData.push_back(triangle.v2.y);
-        vertexData.push_back(triangle.v2.z);
-    }
-    
-    glBindVertexArray(meshVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, meshVBO);
-    glBufferData(GL_ARRAY_BUFFER, vertexData.size() * sizeof(float), vertexData.data(), GL_DYNAMIC_DRAW);
-    
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    
-    // Draw as wireframe
-    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-    glDrawArrays(GL_TRIANGLES, 0, triangles.size() * 3);
-    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-    
-    glBindVertexArray(0);
+    mesh.draw(); // Delegate drawing to the Mesh object
 }
 
 void Renderer::drawMeshes(const std::vector<const Mesh*>& meshes, const std::vector<glm::vec3>& positions) {

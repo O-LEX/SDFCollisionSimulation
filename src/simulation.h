@@ -27,13 +27,16 @@ public:
     
     void setParticleSize(float size);
     
+    // Update collision object methods
+    void updateCollisionObjectBounds();
+    
 private:
     ParticleSystem particleSystem;
     std::vector<std::unique_ptr<CollisionObject>> collisionObjects;
     glm::vec3 boundsMin, boundsMax;
-    
     void handleWallCollisions();
     void handleMultipleCollisionObjectCollisions();
     glm::vec3 reflectVelocity(const glm::vec3& velocity, const glm::vec3& normal) const;
+    glm::vec3 calculateCollisionResponse(const Particle& particle, CollisionObject& object, const glm::vec3& normal);
     bool checkWallCollision(const Particle& particle, glm::vec3& normal) const;
 };

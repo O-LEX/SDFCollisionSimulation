@@ -6,22 +6,27 @@
 class Particle {
 public:
     Particle();
-    Particle(const glm::vec3& position, const glm::vec3& velocity, float size = 0.05f);
+    Particle(const glm::vec3& position, const glm::vec3& velocity, float size = 0.05f, float mass = 1.0f);
     
     void update(float deltaTime);
     
     glm::vec3 getPosition() const { return position; }
     glm::vec3 getVelocity() const { return velocity; }
     float getSize() const { return size; }
+    float getMass() const { return mass; }
+    float getInverseMass() const { return inverseMass; }
     
     void setPosition(const glm::vec3& pos) { position = pos; }
     void setVelocity(const glm::vec3& vel) { velocity = vel; }
     void setSize(float s) { size = s; }
+    void setMass(float m);
     
 private:
     glm::vec3 position;
     glm::vec3 velocity;
     float size;
+    float mass;
+    float inverseMass;  // Cached for performance
 };
 
 class ParticleSystem {

@@ -2,10 +2,21 @@
 #include <random>
 #include <cmath>
 
-Particle::Particle() : position(0.0f), velocity(0.0f), size(0.05f) {}
+Particle::Particle() : position(0.0f), velocity(0.0f), size(0.05f), mass(1.0f), inverseMass(1.0f) {}
 
-Particle::Particle(const glm::vec3& position, const glm::vec3& velocity, float size)
-    : position(position), velocity(velocity), size(size) {}
+Particle::Particle(const glm::vec3& position, const glm::vec3& velocity, float size, float mass)
+    : position(position), velocity(velocity), size(size) {
+    setMass(mass);
+}
+
+void Particle::setMass(float m) {
+    this->mass = m;
+    if (m > 0.0f) {
+        inverseMass = 1.0f / m;
+    } else {
+        inverseMass = 0.0f;  // Infinite mass (static)
+    }
+}
 
 void Particle::update(float deltaTime) {
     position += velocity * deltaTime;
@@ -18,11 +29,11 @@ ParticleSystem::ParticleSystem(int numParticles) : numParticles(numParticles) {
 void ParticleSystem::initialize(const glm::vec3& boxMin, const glm::vec3& boxMax, float speed) {
     particles.clear();
     particles.reserve(numParticles);
-    
-    for (int i = 0; i < numParticles; ++i) {
+      for (int i = 0; i < numParticles; ++i) {
         glm::vec3 pos = getRandomPosition(boxMin, boxMax);
         glm::vec3 vel = getRandomDirection() * speed;
-        particles.emplace_back(pos, vel);
+        float particleMass = 1.0f;  // Default particle mass
+        particles.emplace_back(pos, vel, 0.05f, particleMass);
     }
 }
 

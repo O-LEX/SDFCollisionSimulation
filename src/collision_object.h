@@ -20,10 +20,22 @@ public:
     void setPosition(const glm::vec3& position);
     void setRotation(const glm::quat& rotation);
     void setScale(const glm::vec3& scale);
-    
     const glm::vec3& getPosition() const { return position; }
     const glm::quat& getRotation() const { return rotation; }
     const glm::vec3& getScale() const { return scale; }
+    
+    // Velocity operations
+    void setVelocity(const glm::vec3& velocity);
+    const glm::vec3& getVelocity() const { return velocity; }
+    
+    // Physics update
+    void updatePhysics(float deltaTime);
+    
+    // Mass operations
+    void setMass(float mass);
+    float getMass() const { return mass; }
+    float getInverseMass() const { return inverseMass; }
+    bool isStatic() const { return mass <= 0.0f; }
     
     // Access to mesh and SDF
     const Mesh& getMesh() const { return mesh; }
@@ -52,6 +64,13 @@ private:
     glm::vec3 position;
     glm::quat rotation;
     glm::vec3 scale;
+    
+    // Physics properties
+    glm::vec3 velocity;
+    
+    // Mass properties
+    float mass;
+    float inverseMass;  // Cached inverse mass for performance (0 for static objects)
     
     // Cached transform matrices
     mutable glm::mat4 transformMatrix;
