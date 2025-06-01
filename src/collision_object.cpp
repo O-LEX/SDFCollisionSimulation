@@ -16,17 +16,13 @@ bool CollisionObject::loadFromOBJ(const std::string& filename, int sdfResolution
         sdfGenerated = false;
         return false;
     }
-    meshLoaded = true;
-      // Generate SDF with specified resolution
+    meshLoaded = true;    // Generate SDF with specified resolution
     sdf = SDF(sdfResolution);
     sdf.generateFromMesh(mesh);
     sdfGenerated = true;
     
-    // Calculate default mass based on mesh volume approximation
-    glm::vec3 meshSize = mesh.getMax() - mesh.getMin();
-    float volume = meshSize.x * meshSize.y * meshSize.z;
-    float defaultDensity = 1.0f;  // Assume unit density
-    setMass(volume * defaultDensity);
+    // Don't set default mass - let the user explicitly set it
+    // Mass remains 0.0f (static) until explicitly set
     
     // Mark transform as dirty to ensure matrices are recalculated
     transformDirty = true;

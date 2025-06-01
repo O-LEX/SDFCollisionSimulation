@@ -35,3 +35,4 @@ target_link_libraries(simulation_lib PUBLIC
 )
 
 add_subdirectory(particle_simulation)
+add_subdirectory(collision_simulation)

@@ -30,12 +30,18 @@ public:
     // Update collision object methods
     void updateCollisionObjectBounds();
     
+    // Mesh-to-mesh collision methods
+    void handleMeshToMeshCollisions();
+    
 private:
     ParticleSystem particleSystem;
     std::vector<std::unique_ptr<CollisionObject>> collisionObjects;
     glm::vec3 boundsMin, boundsMax;
     void handleWallCollisions();
     void handleMultipleCollisionObjectCollisions();
+    void checkAndResolveObjectCollision(CollisionObject& obj1, CollisionObject& obj2);
+    void resolveObjectCollision(CollisionObject& obj1, CollisionObject& obj2, 
+                               const glm::vec3& pos1, const glm::vec3& pos2);
     glm::vec3 reflectVelocity(const glm::vec3& velocity, const glm::vec3& normal) const;
     glm::vec3 calculateCollisionResponse(const Particle& particle, CollisionObject& object, const glm::vec3& normal);
     bool checkWallCollision(const Particle& particle, glm::vec3& normal) const;

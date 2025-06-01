@@ -27,6 +27,9 @@ void Simulation::update(float deltaTime) {
     // Check collision object bounds and bounce if needed
     updateCollisionObjectBounds();
     
+    // Handle mesh-to-mesh collisions
+    handleMeshToMeshCollisions();
+    
     // Update particle positions
     particleSystem.update(deltaTime);
     
@@ -196,9 +199,8 @@ glm::vec3 Simulation::calculateCollisionResponse(const Particle& particle, Colli
     if (velocityAlongNormal > 0) {
         return v1;
     }
-    
-    // Restitution coefficient (0 = perfectly inelastic, 1 = perfectly elastic)
-    float restitution = 0.8f;
+      // Restitution coefficient (0 = perfectly inelastic, 1 = perfectly elastic)
+    float restitution = 1.0f;  // Perfect elastic collision
     
     // Calculate impulse scalar
     float j = -(1 + restitution) * velocityAlongNormal;
@@ -269,4 +271,159 @@ void Simulation::updateCollisionObjectBounds() {
             obj->setPosition(position);
         }
     }
+}
+
+void Simulation::handleMeshToMeshCollisions() {
+    // Check all pairs of collision objects for mesh-to-mesh collisions
+    for (size_t i = 0; i < collisionObjects.size(); ++i) {
+        for (size_t j = i + 1; j < collisionObjects.size(); ++j) {
+            auto& obj1 = collisionObjects[i];
+            auto& obj2 = collisionObjects[j];
+            
+            if (!obj1 || !obj2 || !obj1->isValid() || !obj2->isValid()) {
+                continue;
+            }
+            
+            // Skip if both objects are static
+            if (obj1->isStatic() && obj2->isStatic()) {
+                continue;
+            }
+            
+            checkAndResolveObjectCollision(*obj1, *obj2);
+        }
+    }
+}
+
+void Simulation::checkAndResolveObjectCollision(CollisionObject& obj1, CollisionObject& obj2) {
+    // Simple bounding box collision detection first
+    glm::vec3 obj1Min = obj1.getWorldMin();
+    glm::vec3 obj1Max = obj1.getWorldMax();
+    glm::vec3 obj2Min = obj2.getWorldMin();
+    glm::vec3 obj2Max = obj2.getWorldMax();
+    
+    // Check if bounding boxes overlap
+    bool overlap = (obj1Min.x <= obj2Max.x && obj1Max.x >= obj2Min.x) &&
+                  (obj1Min.y <= obj2Max.y && obj1Max.y >= obj2Min.y) &&
+                  (obj1Min.z <= obj2Max.z && obj1Max.z >= obj2Min.z);
+    
+    if (!overlap) {
+        return;
+    }
+    
+    // More detailed collision detection using SDF
+    glm::vec3 obj1Center = obj1.getPosition();
+    glm::vec3 obj2Center = obj2.getPosition();
+    
+    // Sample obj2's SDF at obj1's center and vice versa
+    float distance1 = obj2.getSignedDistance(obj1Center);
+    float distance2 = obj1.getSignedDistance(obj2Center);
+    
+    // Also check multiple sample points for better accuracy
+    float threshold = 0.02f; // Small positive threshold for surface contact
+    
+    bool collision = (distance1 < threshold) || (distance2 < threshold);
+    
+    if (collision) {
+        std::cout << "Collision detected! Distances: " << distance1 << ", " << distance2 << std::endl;
+        resolveObjectCollision(obj1, obj2, obj1Center, obj2Center);
+    }
+}
+
+void Simulation::resolveObjectCollision(CollisionObject& obj1, CollisionObject& obj2, 
+                                       const glm::vec3& pos1, const glm::vec3& pos2) {
+    std::cout << "Starting collision resolution..." << std::endl;
+    
+    // Calculate collision normal (from obj1 to obj2)
+    glm::vec3 normal = pos2 - pos1;
+    float distance = glm::length(normal);
+    
+    if (distance < 0.001f) {
+        // Objects are at the same position, use default separation
+        normal = glm::vec3(1.0f, 0.0f, 0.0f);
+        distance = 0.001f;
+    } else {
+        normal = glm::normalize(normal);
+    }
+    
+    // Calculate actual penetration depth using SDF
+    float penetrationDepth = 0.0f;
+    float dist1 = obj2.getSignedDistance(pos1);
+    float dist2 = obj1.getSignedDistance(pos2);
+    
+    // If distance is negative, objects are penetrating
+    if (dist1 < 0.0f) penetrationDepth = glm::max(penetrationDepth, -dist1);
+    if (dist2 < 0.0f) penetrationDepth = glm::max(penetrationDepth, -dist2);
+    
+    // If no penetration detected but we're here, use small separation
+    if (penetrationDepth == 0.0f) {
+        penetrationDepth = 0.05f; // Small default separation
+    }
+    
+    // Use separation based on penetration
+    float separation = glm::max(0.02f, penetrationDepth * 1.2f);  // 20% buffer
+    glm::vec3 separationVector = normal * separation * 0.5f;
+    
+    // Store original positions for smoother adjustment
+    glm::vec3 originalPos1 = pos1;
+    glm::vec3 originalPos2 = pos2;
+    
+    if (!obj1.isStatic()) {
+        obj1.setPosition(originalPos1 - separationVector);
+    }
+    if (!obj2.isStatic()) {
+        obj2.setPosition(originalPos2 + separationVector);
+    }
+    
+    // Calculate collision response
+    glm::vec3 v1 = obj1.getVelocity();
+    glm::vec3 v2 = obj2.getVelocity();
+    
+    float m1 = obj1.getMass();
+    float m2 = obj2.getMass();
+    
+    std::cout << "Collision response - Masses: " << m1 << ", " << m2 
+              << ", Penetration: " << penetrationDepth << ", Distance: " << distance << std::endl;
+    std::cout << "Velocities before: v1=(" << v1.x << "," << v1.y << "," << v1.z 
+              << ") v2=(" << v2.x << "," << v2.y << "," << v2.z << ")" << std::endl;
+      // Handle static objects
+    if (obj1.isStatic()) {
+        // obj1 is static, only obj2 bounces
+        glm::vec3 newV2 = reflectVelocity(v2, -normal);
+        obj2.setVelocity(newV2);  // No damping - perfect reflection
+        std::cout << "Static collision resolved (obj1 static)" << std::endl;
+        return;
+    }
+    if (obj2.isStatic()) {
+        // obj2 is static, only obj1 bounces
+        glm::vec3 newV1 = reflectVelocity(v1, normal);
+        obj1.setVelocity(newV1);  // No damping - perfect reflection
+        std::cout << "Static collision resolved (obj2 static)" << std::endl;
+        return;
+    }
+      // Both objects are dynamic - calculate collision response
+    glm::vec3 relativeVelocity = v1 - v2;
+    float velocityAlongNormal = glm::dot(relativeVelocity, normal);
+    
+    std::cout << "Relative velocity along normal: " << velocityAlongNormal << std::endl;
+      // Always apply collision response for interpenetrating objects
+    
+    // Restitution coefficient (bounce) - perfect elastic collision
+    float restitution = 1.0f;
+    
+    // Calculate impulse scalar
+    float j = -(1 + restitution) * velocityAlongNormal;
+    j /= (obj1.getInverseMass() + obj2.getInverseMass());
+    
+    // Apply impulse
+    glm::vec3 impulse = j * normal;
+    
+    glm::vec3 newV1 = v1 + obj1.getInverseMass() * impulse;
+    glm::vec3 newV2 = v2 - obj2.getInverseMass() * impulse;
+    
+    obj1.setVelocity(newV1);
+    obj2.setVelocity(newV2);
+    
+    std::cout << "Dynamic mesh collision resolved! Final velocities: (" 
+              << newV1.x << "," << newV1.y << "," << newV1.z << ") and ("
+              << newV2.x << "," << newV2.y << "," << newV2.z << ")" << std::endl;
 }

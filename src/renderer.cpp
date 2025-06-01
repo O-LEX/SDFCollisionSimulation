@@ -405,6 +405,25 @@ void Renderer::drawMesh(const Mesh& mesh, const glm::vec3& position) {
     mesh.draw(); // Delegate drawing to the Mesh object
 }
 
+void Renderer::drawMesh(const Mesh& mesh, const glm::mat4& transformMatrix) {
+    glUseProgram(shaderProgram);
+    
+    // Use the provided transform matrix directly (includes position, rotation, and scale)
+    
+    // Set uniforms
+    GLint modelLoc = glGetUniformLocation(shaderProgram, "model");
+    GLint viewLoc = glGetUniformLocation(shaderProgram, "view");
+    GLint projLoc = glGetUniformLocation(shaderProgram, "projection");
+    GLint colorLoc = glGetUniformLocation(shaderProgram, "color");
+    
+    glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(transformMatrix));
+    glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(viewMatrix));
+    glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projectionMatrix));
+    glUniform3f(colorLoc, 0.3f, 0.8f, 0.3f); // Green color for mesh
+    
+    mesh.draw(); // Delegate drawing to the Mesh object
+}
+
 void Renderer::drawMeshes(const std::vector<const Mesh*>& meshes, const std::vector<glm::vec3>& positions) {
     if (meshes.size() != positions.size()) {
         std::cerr << "Error: Meshes and positions vectors must have the same size" << std::endl;
